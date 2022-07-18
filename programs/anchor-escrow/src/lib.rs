@@ -83,6 +83,17 @@ pub struct Initialize<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+impl<'info> From<&mut Initialize<'info>> for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+    fn from(accounts: &mut Initialize<'info>) -> Self {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: accounts.initializer_deposit_token_account.to_account_info().clone(),
+            current_authority: accounts.initializer.to_account_info().clone(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
 #[derive(Accounts)]
 pub struct Exchange<'info> {
     /// CHECK:
