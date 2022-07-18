@@ -50,6 +50,20 @@ pub mod anchor_escrow {
         )?;
         Ok(())
     }
+
+    pub fn cancel_escrow(_ctx: Context<CancelEscrow>) -> Result<()> {
+        let (_pda, bump_seed) = Pubkey::find_program_address(&[ESCROW_PDA_SEED], _ctx.program_id);
+        let seeds = &[&ESCROW_PDA_SEED[..], &[bump_seed]];
+
+        token::set_authority(
+            _ctx.accounts
+                .into_set_authority_context()
+                .with_signer(&[&seeds[..]]),
+            AuthorityType::AccountOwner,
+            Some(_ctx.accounts.escrow_account.initializer_key),
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -120,6 +134,36 @@ impl<'info> Exchange<'info> {
         CpiContext::new(cpi_program, cpi_accounts)
     }
 
+    fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: self.pda_deposit_token_account.to_account_info().clone(),
+            current_authority: self.pda_account.clone(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+
+#[derive(Accounts)]
+pub struct CancelEscrow<'info> {
+    /// CHECK:
+    pub initializer: AccountInfo<'info>,
+    #[account(mut)]
+    pub pda_deposit_token_account: Account<'info, TokenAccount>,
+    /// CHECK:
+    pub pda_account: AccountInfo<'info>,
+    #[account(
+        mut,
+        constraint = escrow_account.initializer_key == *initializer.key,
+        constraint = escrow_account.initializer_deposit_token_account == *pda_deposit_token_account.to_account_info().key,
+        close = initializer,
+    )]
+    pub escrow_account: Account<'info, EscrowAccount>,
+    pub token_program: Program<'info, Token>,
+}
+
+impl<'info> CancelEscrow<'info> {
     fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
         let cpi_accounts = SetAuthority {
             account_or_mint: self.pda_deposit_token_account.to_account_info().clone(),
